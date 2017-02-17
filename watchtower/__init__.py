@@ -166,7 +166,13 @@ class CloudWatchLogHandler(handler_base_class):
                    or cur_batch_size + size(msg) > max_batch_size \
                    or cur_batch_msg_count >= max_batch_count \
                    or time.time() >= cur_batch_deadline:
-                    self._submit_batch(cur_batch, stream_name)
+                    try:
+                        self._submit_batch(cur_batch, stream_name)
+                    except ClientError:
+                        if(not self.shutting_down): raise
+                        # queue.join is called in flush on exit, if the mutex is never released the process won't exit
+                        warnings.warn("ClientError when shutting down, possible unsent messages", PyCWLWarning)
+                        return my_queue.task_done()
                     if msg is not None:
                         # We don't want to call task_done if the queue was empty and we didn't receive anything new
                         my_queue.task_done()
